@@ -2,13 +2,13 @@ import jax
 import jax.numpy as jnp 
 from jax import random
 
-def lin_projections(x: jnp.ndarray, key: jax.Array, embed_dim: int, head_dim: int):
+def lin_projections(x: jnp.ndarray, key: jax.Array, d_model: int, head_dim: int):
 
     kq, kk, kv = random.split(key, 3)
 
-    W_q = random.normal(kq, (embed_dim, head_dim))
-    W_k = random.normal(kk, (embed_dim, head_dim))
-    W_v = random.normal(kv, (embed_dim, head_dim))
+    W_q = random.normal(kq, (d_model, head_dim))
+    W_k = random.normal(kk, (d_model, head_dim))
+    W_v = random.normal(kv, (d_model, head_dim))
 
     Q = x @ W_q
     K = x @ W_k
@@ -29,12 +29,12 @@ def scaled_dot_product_att(Q: jnp.ndarray, K: jnp.ndarray, V: jnp.ndarray) -> jn
     out = weights @ V
     return out 
 
-def init_mheadattn(key:jax.Array, embed_dim:int, head_dim:int, num_heads:int) -> jnp.ndarray:
+def init_mheadattn(key:jax.Array, d_model:int, head_dim:int, num_heads:int) -> jnp.ndarray:
     kq, kk, kv = random.split(key, 3)
 
-    W_q = random.normal(kq, (embed_dim, num_heads*head_dim))
-    W_k = random.normal(kk, (embed_dim, num_heads*head_dim))
-    W_v = random.normal(kv, (embed_dim, num_heads*head_dim))
+    W_q = random.normal(kq, (d_model, num_heads*head_dim))
+    W_k = random.normal(kk, (d_model, num_heads*head_dim))
+    W_v = random.normal(kv, (d_model, num_heads*head_dim))
     return W_q, W_k, W_v
 
 num_heads = 4
@@ -61,17 +61,18 @@ def multihead_attn(x:jnp.ndarray, W_q:jax.Array, W_k:jax.Array, W_v:jax.Array) -
     weights = softmax(scores, axis=-1)
 
     out = weights @ V
+    out = out.transpose(0,2,1,3).reshape(batch_size, seq_len, d_model)
     return out 
 
 key = random.PRNGKey(0)
-batch, seq, embed_dim, num_heads = 1, 4, 8, 4
-head_dim = embed_dim // num_heads
+batch, seq, d_model, num_heads = 1, 4, 8, 4
+head_dim = d_model // num_heads
 
-x = random.normal(key, (batch, seq, embed_dim))
+x = random.normal(key, (batch, seq, d_model))
 kq, kk, kv = random.split(key, 3)
-W_q = random.normal(kq, (embed_dim, num_heads * head_dim))
-W_k = random.normal(kk, (embed_dim, num_heads * head_dim))
-W_v = random.normal(kv, (embed_dim, num_heads * head_dim))
+W_q = random.normal(kq, (d_model, num_heads * head_dim))
+W_k = random.normal(kk, (d_model, num_heads * head_dim))
+W_v = random.normal(kv, (d_model, num_heads * head_dim))
 
 
 print(jax.make_jaxpr(multihead_attn)(x, W_q, W_k, W_v))
