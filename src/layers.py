@@ -1,20 +1,20 @@
 import jax.numpy as jnp 
 import jax 
 from jax import random 
-from selfattention import multihead_attn
+from selfattention import multihead_attn, masked_multihead_attn
 
 def relu(x:jax.Array):
     return jnp.maximum(0,x)
 
 class LayerNorm: 
-    def __init__(self, dim, eps=1e-15): 
+    def __init__(self, dim, eps=1e-5): 
         self.eps = eps 
         self.gamma = jnp.ones((dim,))
         self.beta = jnp.zeros((dim,))
 
     def __call__(self, x):
         mean = jnp.mean(x, axis=-1, keepdims=True)
-        var = jnp.var(mean, axis = -1, keepdims=True)
+        var = jnp.var(x, axis = -1, keepdims=True)
         x_norm = (x-mean)/jnp.sqrt(var + self.eps)
         out = self.gamma * x_norm + self.beta
         return out 
@@ -33,7 +33,7 @@ class FeedForwardNN:
         layer3 = (layer2 @ self.W2) + self.B2
         return layer3
     
-class encoderBlock: 
+class EncoderBlock: 
     def __init__(self, d_model:int, d_ff:int, num_heads:int, key:jax.Array):
         k1, k2, k3, k_ff = random.split(key, 4)
         self.ln1 = LayerNorm(d_model)
@@ -47,7 +47,57 @@ class encoderBlock:
         
         self.d_model = d_model
         self.num_heads = num_heads
+    
+    @jax.jit
+    def __call__(self, x): 
+        x_norm = self.ln1(x)
+        attn_out = multihead_attn(x_norm, x_norm, self.W_q, self.W_k, self.W_v, self.num_heads, self.d_model)
+        x = x + attn_out
+        
+        x_norm2 = self.ln2(x)
+        ffn_out = self.ffnn(x_norm2)
+        x = x + ffn_out
+        return x
+    
+class DecoderBlock:
+    def __init__(self,d_model:int, d_ff:int, num_heads:int, key:jax.Array):
+        k1, k2, k3, k4, k5, k6, k_ff = random.split(key, 7) 
+            
+        self.Wq_mask = random.normal(k1, (d_model, d_model)) *jnp.sqrt(2.0/ d_model)
+        self.Wk_mask = random.normal(k2, (d_model, d_model)) * jnp.sqrt(2.0/d_model)
+        self.Wv_mask = random.normal(k3,(d_model, d_model)) * jnp.sqrt(2.0/d_model)
 
-    def __call__(): 
+        self.Wq_cross = random.normal(k4, (d_model, d_model)) *jnp.sqrt(2.0/ d_model)
+        self.Wk_cross = random.normal(k5, (d_model, d_model)) * jnp.sqrt(2.0/d_model)
+        self.Wv_cross = random.normal(k6,(d_model, d_model)) * jnp.sqrt(2.0/d_model)
+
+        self.ffnn = FeedForwardNN(d_model, d_ff, k_ff)
+        self.ln1 = LayerNorm(d_model)
+        self.ln2 = LayerNorm(d_model)
+        self.ln3 = LayerNorm(d_model)
+        
+        self.d_model = d_model
+        self.num_heads = num_heads
+        
+    def __call__(self, x, enc_out):
+        batch_size, seq_len, _ = x.shape
+        
+        mask = jnp.tril(jnp.ones((seq_len, seq_len), dtype=bool))
+        x1 = self.ln1(x)
+        m_attn_out = masked_multihead_attn(x1, self.Wq_mask, self.Wk_mask, self.Wv_mask, self.num_heads, self.d_model, mask)
+       
+        x = x + m_attn_out
+        x2 = self.ln2(x)
+        c_attn_out = multihead_attn(x2, enc_out, self.Wq_cross, self.Wk_cross, self.Wv_cross, self.num_heads, self.d_model)
+        
+        x = x + c_attn_out
+        x3 = self.ln3(x)
+        x = x + self.ffnn(x3)
+        
+        return x
+
+
+
+
 
 
