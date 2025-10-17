@@ -40,7 +40,6 @@ def init_mheadattn(key:jax.Array, d_model:int, head_dim:int, num_heads:int) -> j
 num_heads = 4
 head_dim = 4
 
-@jax.jit
 def multihead_attn(q_input: jnp.ndarray, kv_input: jnp.ndarray, W_q: jax.Array, W_k: jax.Array, W_v: jax.Array,
                    num_heads: int, d_model: int) -> jnp.ndarray:
     
@@ -77,8 +76,8 @@ W_k = random.normal(kk, (d_model, num_heads * head_dim))
 W_v = random.normal(kv, (d_model, num_heads * head_dim))
 
 
-print(jax.make_jaxpr(multihead_attn)(x, W_q, W_k, W_v))
-print(multihead_attn.lower(x, W_q, W_k, W_v).compiler_ir('stablehlo').operation.get_asm())
+#print(jax.make_jaxpr(multihead_attn)(x, W_q, W_k, W_v))
+#print(multihead_attn.lower(x, W_q, W_k, W_v).compiler_ir('stablehlo').operation.get_asm())
 
 def masked_multihead_attn(x, W_q, W_k, W_v, num_heads, d_model, mask) -> jnp.ndarray:
     head_dim = d_model // num_heads 

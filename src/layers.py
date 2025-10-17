@@ -48,7 +48,7 @@ class EncoderBlock:
         self.d_model = d_model
         self.num_heads = num_heads
     
-    @jax.jit
+
     def __call__(self, x): 
         x_norm = self.ln1(x)
         attn_out = multihead_attn(x_norm, x_norm, self.W_q, self.W_k, self.W_v, self.num_heads, self.d_model)
@@ -56,7 +56,7 @@ class EncoderBlock:
         
         x_norm2 = self.ln2(x)
         ffn_out = self.ffnn(x_norm2)
-        x = x + ffn_out
+        x = x + ffn_out 
         return x
     
 class DecoderBlock:
@@ -95,6 +95,47 @@ class DecoderBlock:
         x = x + self.ffnn(x3)
         
         return x
+    
+class Encoder: 
+    def __init__(self, num_layers:int,  d_model:int, d_ff:int, num_heads:int, key:jax.Array):
+        keys = random.split(key, num_layers)
+        self.layers = [EncoderBlock(d_model, d_ff, num_heads, k) for k in keys]
+        self.ln_final = LayerNorm(d_model)
+
+    def __call__(self, x):
+        for layer in self.layers: 
+            x = layer(x) 
+        x = self.ln_final(x)
+        return x
+    
+class Decoder: 
+    def __init__(self, num_layers:int, d_model:int, d_ff:int, num_heads:int, key:jax.Array):
+        keys = random.split(key, num_layers)
+        self.layers = [DecoderBlock(d_model, d_ff, num_heads, k) for k in keys]
+        self.ln_final = LayerNorm(d_model)
+
+
+    def __call__(self, x, enc_out):
+        for layer in self.layers:
+            x = layer(x, enc_out)
+        x = self.ln_final(x)
+        return x 
+
+class Transformer: 
+    def __init__(self, num_layers: int, d_model:int, d_ff:int, num_heads:int, key:jax.Array): 
+        k_enc, k_dec = random.split(key)
+        self.encoder = Encoder(num_layers, d_model, d_ff, num_heads, k_enc)
+        self.decoder = Decoder(num_layers, d_model, d_ff, num_heads, k_dec)
+
+    def __call__(self, src, tgt): 
+        enc_out = self.encoder(src)
+        dec_out = self.decoder(tgt, enc_out)
+        return dec_out
+    
+
+
+
+
 
 
 
