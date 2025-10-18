@@ -133,6 +133,33 @@ class Transformer:
         return dec_out
     
 
+def init_transformer_params(key, num_layers, d_model, d_ff, num_heads):
+    k1, k2, k3 = random.split(key, 3)
+    # encoder weights
+    enc_Wq = random.normal(k1, (d_model, d_model))
+    enc_Wk = random.normal(k2, (d_model, d_model))
+    enc_Wv = random.normal(k3, (d_model, d_model))
+    # normally you’d add ffn weights etc.; this is just a start
+    params = {
+        "encoder": {
+            "Wq": enc_Wq,
+            "Wk": enc_Wk,
+            "Wv": enc_Wv,
+        },
+        # you can mirror similar keys for the decoder
+    }
+    return params
+
+
+def transformer_apply(params, src, tgt):
+    # simple demo forward using those weights
+    Wq, Wk, Wv = params["encoder"]["Wq"], params["encoder"]["Wk"], params["encoder"]["Wv"]
+    Q = src @ Wq
+    K = src @ Wk
+    V = src @ Wv
+    out = (Q + K + V) / 3.0
+    return out
+
 
 
 
