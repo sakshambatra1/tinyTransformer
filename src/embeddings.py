@@ -6,21 +6,21 @@ from jax import make_jaxpr, jit
 
 from jax.typing import ArrayLike
 
-def make_embeddings(key: jax.Array, vocab_size: int = 50257, embed_dim: int = 512) -> jnp.ndarray:
-    return random.normal(key, (vocab_size, embed_dim))
+def make_embeddings(key: jax.Array, vocab_size: int = 50257, d_model: int = 512) -> jnp.ndarray:
+    return random.normal(key, (vocab_size, d_model))
 
 def embed_tokens(embedding_matrix: jnp.ndarray, tokens_id:jnp.ndarray) -> jnp.ndarray: 
     return embedding_matrix[tokens_id]
 
-def precompute_rope(max_seq_len: int, embed_dim:int) -> Tuple[jnp.ndarray, jnp.ndarray]: 
-    assert embed_dim % 2 == 0 
-    dim_half = embed_dim // 2 
+def precompute_rope(max_seq_len: int, d_model:int) -> Tuple[jnp.ndarray, jnp.ndarray]: 
+    assert d_model % 2 == 0 
+    dim_half = d_model // 2 
 
     # FIX: Corrected typo from jnp.arrange to jnp.arange
     dim_indices = jnp.arange(0, dim_half)
     
-    # FIX: Corrected denominator calculation for standard RoPE (dim_indices * 2 / embed_dim)
-    freqs = 1.0 / 10000**(dim_indices * 2 / embed_dim)
+    # FIX: Corrected denominator calculation for standard RoPE (dim_indices * 2 / d_model)
+    freqs = 1.0 / 10000**(dim_indices * 2 / d_model)
 
     positions = jnp.arange(max_seq_len)
     theta = positions[:, None] * freqs[None, :]
@@ -32,10 +32,10 @@ import jax.numpy as jnp
 
 def rotate_pairs_jax(x: jnp.ndarray, cos: jnp.ndarray, sin: jnp.ndarray) -> jnp.ndarray:
     orig_shape = x.shape
-    embed_dim = orig_shape[-1]
-    dim_half = embed_dim // 2
+    d_model = orig_shape[-1]
+    dim_half = d_model // 2
 
-    assert embed_dim % 2 == 0, "embed_dim must be even"
+    assert d_model % 2 == 0, "d_model must be even"
 
     # 1. Reshape into pairs: (..., seq_len, dim_half, 2)
     # The -1 infers the missing batch/seq dimensions.
@@ -58,7 +58,7 @@ def rotate_pairs_jax(x: jnp.ndarray, cos: jnp.ndarray, sin: jnp.ndarray) -> jnp.
     # 4. Stack and reshape back to original rank
     x_rot = jnp.stack([x1_new, x2_new], axis=-1)
 
-    # Return to original shape (..., embed_dim)
+    # Return to original shape (..., d_model)
     return x_rot.reshape(orig_shape)
 
 def apply_rope(x: jnp.ndarray, cos: jnp.ndarray, sin: jnp.ndarray) -> jnp.ndarray:
@@ -136,17 +136,17 @@ if __name__ == "__main__":
     key, subkey = random.split(key)
 
     vocab_size = 50257
-    embed_dim = 512
+    d_model = 512
     max_seq_len = 1024
 
     # make embeddings
-    emb = make_embeddings(subkey, vocab_size=vocab_size, embed_dim=embed_dim)
+    emb = make_embeddings(subkey, vocab_size=vocab_size, d_model=d_model)
 
     # small toy sequence of length 10
     tokens = jnp.arange(10)
     seq_emb = embed_tokens(emb, tokens) # (10, 512)
 
-    cos, sin = precompute_rope(max_seq_len=max_seq_len, embed_dim=embed_dim)
+    cos, sin = precompute_rope(max_seq_len=max_seq_len, d_model=d_model)
 
     # apply RoPE normally and jitted
     out = apply_rope(seq_emb, cos, sin)
