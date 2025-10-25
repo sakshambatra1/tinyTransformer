@@ -40,29 +40,38 @@ def init_mheadattn(key:jax.Array, d_model:int, head_dim:int, num_heads:int) -> j
 num_heads = 4
 head_dim = 4
 
-def multihead_attn(q_input: jnp.ndarray, kv_input: jnp.ndarray, W_q: jax.Array, W_k: jax.Array, W_v: jax.Array,
-                   num_heads: int, d_model: int) -> jnp.ndarray:
-    
+@jax.jit
+def multihead_attn(q_input: jnp.ndarray,
+                   kv_input: jnp.ndarray,
+                   W_q: jnp.ndarray,
+                   W_k: jnp.ndarray,
+                   W_v: jnp.ndarray) -> jnp.ndarray:
+    # infer dimensions from input tensors instead of passing them
+    batch_size, q_len, d_model = q_input.shape
+    W_q.shape[-1] // d_model  # you can change this constant as needed
     head_dim = d_model // num_heads
-    
+
+    # linear projections
     Q = q_input @ W_q
     K = kv_input @ W_k
     V = kv_input @ W_v
-    
-    batch_size, q_len, _ = Q.shape
+
     _, kv_len, _ = K.shape
-    
+
+    # reshape into heads: (batch, heads, seq_len, head_dim)
     Q = Q.reshape(batch_size, q_len, num_heads, head_dim).transpose(0, 2, 1, 3)
     K = K.reshape(batch_size, kv_len, num_heads, head_dim).transpose(0, 2, 1, 3)
     V = V.reshape(batch_size, kv_len, num_heads, head_dim).transpose(0, 2, 1, 3)
-    
+
+    # scaled dot-product attention
     scores = jnp.matmul(Q, K.swapaxes(-2, -1)) / jnp.sqrt(head_dim)
-    weights = softmax(scores, axis=-1)
-    
+    weights = jax.nn.softmax(scores, axis=-1)
+
     out = jnp.matmul(weights, V)
     out = out.transpose(0, 2, 1, 3).reshape(batch_size, q_len, d_model)
-    
+
     return out
+
 
 
 key = random.PRNGKey(0)
@@ -79,32 +88,41 @@ W_v = random.normal(kv, (d_model, num_heads * head_dim))
 #print(jax.make_jaxpr(multihead_attn)(x, W_q, W_k, W_v))
 #print(multihead_attn.lower(x, W_q, W_k, W_v).compiler_ir('stablehlo').operation.get_asm())
 
-def masked_multihead_attn(x, W_q, W_k, W_v, num_heads, d_model, mask) -> jnp.ndarray:
-    head_dim = d_model // num_heads 
+def masked_multihead_attn(x: jnp.ndarray,
+                          W_q: jnp.ndarray,
+                          W_k: jnp.ndarray,
+                          W_v: jnp.ndarray,
+                          mask: jnp.ndarray) -> jnp.ndarray:
+    # infer dimensions dynamically
+    batch_size, seq_len, d_model = x.shape
+    num_heads = 4  # or infer dynamically below
+    head_dim = d_model // num_heads
+
+    # optional dynamic inference
+    num_heads = W_q.shape[-1] // d_model
+    head_dim = d_model // num_heads
 
     Q = x @ W_q
     K = x @ W_k
     V = x @ W_v
 
-    batch_size, seq_len, _ = x.shape
-    Q = Q.reshape(batch_size, seq_len, num_heads, head_dim)
-    Q = Q.transpose(0,2,1,3)
+    # reshape into heads: (batch, heads, seq, head_dim)
+    Q = Q.reshape(batch_size, seq_len, num_heads, head_dim).transpose(0, 2, 1, 3)
+    K = K.reshape(batch_size, seq_len, num_heads, head_dim).transpose(0, 2, 1, 3)
+    V = V.reshape(batch_size, seq_len, num_heads, head_dim).transpose(0, 2, 1, 3)
 
-    K = K.reshape(batch_size, seq_len, num_heads, head_dim)
-    K = K.transpose(0,2,1,3)
+    # scaled dot-product attention
+    scores = jnp.matmul(Q, K.swapaxes(-2, -1)) / jnp.sqrt(head_dim)
 
-    V = V.reshape(batch_size, seq_len, num_heads, head_dim)
-    V = V.transpose(0,2,1,3)
-
-    scores = jnp.matmul(Q, K.swapaxes(-2,-1))/jnp.sqrt(head_dim)
-
-    mask = mask[None, None, :, :]  # -> (1, 1, seq_len, seq_len)
-
+    # broadcast mask to (batch=1, heads=1, seq, seq)
+    mask = mask[None, None, :, :]
     scores = jnp.where(mask, scores, -1e9)
 
-    weights = softmax(scores, axis=-1)
-    out = weights @ V
+    weights = jax.nn.softmax(scores, axis=-1)
+
+    out = jnp.matmul(weights, V)
     out = out.transpose(0, 2, 1, 3).reshape(batch_size, seq_len, d_model)
+
     return out
 
 

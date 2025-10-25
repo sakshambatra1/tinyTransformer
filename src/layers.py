@@ -51,7 +51,7 @@ class EncoderBlock:
 
     def __call__(self, x): 
         x_norm = self.ln1(x)
-        attn_out = multihead_attn(x_norm, x_norm, self.W_q, self.W_k, self.W_v, self.num_heads, self.d_model)
+        attn_out = multihead_attn(x_norm, x_norm, self.W_q, self.W_k, self.W_v)
         x = x + attn_out
         
         x_norm2 = self.ln2(x)
@@ -84,11 +84,11 @@ class DecoderBlock:
         
         mask = jnp.tril(jnp.ones((seq_len, seq_len), dtype=bool))
         x1 = self.ln1(x)
-        m_attn_out = masked_multihead_attn(x1, self.Wq_mask, self.Wk_mask, self.Wv_mask, self.num_heads, self.d_model, mask)
+        m_attn_out = masked_multihead_attn(x1, self.Wq_mask, self.Wk_mask, self.Wv_mask, mask)
        
         x = x + m_attn_out
         x2 = self.ln2(x)
-        c_attn_out = multihead_attn(x2, enc_out, self.Wq_cross, self.Wk_cross, self.Wv_cross, self.num_heads, self.d_model)
+        c_attn_out = multihead_attn(x2, enc_out, self.Wq_cross, self.Wk_cross, self.Wv_cross)
         
         x = x + c_attn_out
         x3 = self.ln3(x)
